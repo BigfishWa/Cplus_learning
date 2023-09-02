@@ -95,6 +95,72 @@ str.erase(3, 2);
 
 
 
+### string源码实现(用char*)
+
+```c++
+#include <cstring>  // For string manipulation functions
+
+class string {
+private:
+    char* data;       // 指向字符串数据的指针
+    size_t length;    // 字符串的长度
+
+public:
+    // 默认构造函数
+    string() : data(nullptr), length(0) {}
+    // 构造函数
+    string(const char* str) {
+        length = std::strlen(str);  // 计算字符串长度
+        data = new char[length + 1];  // 分配内存
+        std::strcpy(data, str);  // 复制字符串内容
+    }
+
+    // 拷贝构造函数
+    string(const string& other) {
+        length = other.length;
+        data = new char[length + 1];
+        std::strcpy(data, other.data);
+    }
+
+    // 析构函数
+    ~string() {
+        delete[] data;  // 释放内存
+    }
+
+    // 获取字符串长度
+    size_t size() const {
+        return length;
+    }
+
+    // 获取 C 风格的字符串
+    const char* c_str() const {
+        return data;
+    }
+
+    // 重载赋值运算符
+    string& operator=(const string& other) {
+        if (this != &other) {
+            delete[] data;  // 释放原有内存
+            length = other.length;
+            data = new char[length + 1];
+            std::strcpy(data, other.data);
+        }
+        return *this;
+    }
+
+    // 重载加法运算符
+    string operator+(const string& other) const {
+        string result;
+        result.length = length + other.length;
+        result.data = new char[result.length + 1];
+        std::strcpy(result.data, data);
+        std::strcat(result.data, other.data);
+        return result;
+    }
+};
+```
+
+
 ## unique 去重
 
 这个函数只能对"**相同元素在并邻在一块的**"序列进行去重. **不能对相同元素七零八落地分布的一般序列进行去重**, 可以对一般数组进行**排序**后再用unique()实现去重目的即可。
@@ -229,6 +295,124 @@ unordered_map的底层实现是hashtable，采用开链法（也就是用桶）�
 1. 动态调整哈希表大小：如果发生频繁的冲突，可能是因为哈希表的大小不足以容纳所有的元素。在这种情况下，可以考虑动态调整哈希表的大小，以增加槽位的数量，从而减少冲突的概率。通常，当哈希表中的负载因子（即元素数量与槽位数量的比值）超过某个阈值时，就会触发重新哈希（Rehash）操作，创建一个更大的哈希表并重新插入所有元素。
 
 
+
+### hashmap源码实现
+
+以下是一个简单的C++代码示例，展示了如何实现一个基于哈希表的HashMap：
+
+```cpp
+#include <iostream>
+#include <vector>
+#include <list>
+
+// 定义键值对数据结构
+template<typename K, typename V>
+struct KeyValuePair {
+    K key;
+    V value;
+
+    KeyValuePair(const K& k, const V& v) : key(k), value(v) {}  //存储键值对
+};
+
+// 实现HashMap
+template<typename K, typename V>
+class HashMap {
+private:
+    std::vector<std::list<KeyValuePair<K, V>>> buckets;   //开链法，用数组存双向链表list，也叫桶吧
+    size_t size;
+    size_t capacity;
+
+public:
+    HashMap(size_t capacity) : size(0), capacity(capacity) {
+        buckets.resize(capacity);
+    }
+
+    size_t hashFunction(const K& key) {
+        // 哈希函数示例：简单取余
+        return std::hash<K>{}(key) % capacity;  //实现哈希函数
+    }
+
+    void put(const K& key, const V& value) {
+        size_t index = hashFunction(key);
+        std::list<KeyValuePair<K, V>>& bucket = buckets[index];   //通过hash函数得到索引桶
+
+        // 检查是否已存在相同的键
+        for (auto& kv : bucket) {
+            if (kv.key == key) {
+                kv.value = value;
+                return;
+            }
+        }
+
+        // 创建新的键值对并插入到桶中
+        bucket.push_back(KeyValuePair<K, V>(key, value));
+        size++;
+    }
+
+    V get(const K& key) {
+        size_t index = hashFunction(key);
+        std::list<KeyValuePair<K, V>>& bucket = buckets[index];
+
+        // 在桶中查找键
+        for (auto& kv : bucket) {
+            if (kv.key == key) {
+                return kv.value;
+            }
+        }
+
+        // 键不存在
+        throw std::out_of_range("Key not found");
+    }
+
+    void remove(const K& key) {
+        size_t index = hashFunction(key);
+        std::list<KeyValuePair<K, V>>& bucket = buckets[index];
+
+        // 在桶中查找并删除键值对，直接用list的erase函数
+        for (auto it = bucket.begin(); it != bucket.end(); ++it) {
+            if (it->key == key) {
+                bucket.erase(it);
+                size--;  //注意减一
+                
+                return;
+            }
+        }
+
+        // 键不存在
+        throw std::out_of_range("Key not found");
+    }
+
+    size_t getSize() const {
+        return size;
+    }
+};
+
+int main() {
+    HashMap<std::string, int> hashMap(10);
+    hashMap.put("apple", 5);
+    hashMap.put("banana", 8);
+    hashMap.put("orange", 12);
+
+    std::cout << "Size of HashMap: " << hashMap.getSize() << std::endl;
+
+    int value = hashMap.get("banana");
+    std::cout << "Value of 'banana': " << value << std::endl;
+
+    hashMap.remove("apple");
+
+    try {
+        int nonExistentValue = hashMap.get("apple");
+        std::cout << "Value of 'apple': " << nonExistentValue << std::endl;
+    }
+    catch (const std::out_of_range& e) {
+        std::cout << "Key 'apple' not found" << std::endl;
+    }
+
+    return 0;
+}
+```
+
+这个示例实现了一个简单的基于哈希表的HashMap，使用了C++的STL容器`std::vector`和`std::list`来存储桶和键值对。它提供了`put`、`get`和`remove`方法来插入、获取和删除键值对，并且支持哈希函数来计算键的哈希值以确定索引位置。在`main`函数中，演示了如何使用HashMap进行操作，并输出结果。请注意，这只是一个简单的示例，实际的HashMap实现可能需要更多的功能和优化。
 
 ## stack
 
